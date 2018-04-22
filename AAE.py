@@ -18,15 +18,15 @@ mode= 1
 flg_graph = False # showing graphs or not during the training. Showing graphs significantly slows down the training.
 model_folder = '' # name of the model to be restored. white space means most recent.
 n_leaves = 6  # number of leaves in the mixed 2D Gaussian
-n_epochs_ge = 90*n_leaves # mode 3, generator training epochs
-ac_batch_size = 100  # autoencoder training batch size
+n_epochs_ge = 15 #90*n_leaves # mode 3, generator training epochs
+ac_batch_size = 32  # autoencoder training batch size
 import numpy as np
 blanket_resolution = 10*int(np.sqrt(n_leaves)) # blanket resoliution for descriminator or its contour plot
 dc_real_batch_size = int(blanket_resolution*blanket_resolution/15) # descriminator training real dist samplling batch size
 
 OoT_zWeight = 1 # out of target weight for latent z in generator
 OoT_yWeight = 1 # out of target weight for latent y in generator
-n_latent_sample = 5000 # latent code visualization sample
+n_latent_sample = 1000 # latent code visualization sample
 tb_batch_size = 400  # x_inputs batch size for tb
 tb_log_step = 200  # tb logging step
 dc_contour_res_x = 5 # x to the blanket resolution for descriminator contour plot
