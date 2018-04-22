@@ -12,8 +12,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from six.moves import cPickle as pickle
 from sklearn.preprocessing import MinMaxScaler
-import pandas as pd
-import math as m
 
 """
 Data download
@@ -266,29 +264,38 @@ ShowSamples(X_DS = X_test_D, Y_DS = Y_test_D, Channel = c)
 
 """
 Creating 45 x 45 array
+Visual check
 """      
 
 X_train_DI = np.empty((X_train_D.shape[0],45,45,2),float)
 X_test_DI = np.empty((X_test_D.shape[0],45,45,2),float)
-scaler = MinMaxScaler(feature_range = (0,255))
 
-for r in range(0,X_test_D.shape[0]):
-    X_test_D[r,:,0] = scaler.fit_transform( X_test_D[r,:,0])
-    X_test_D[r,:,1] = scaler.fit_transform( X_test_D[r,:,1])
-
-for r in range(0,X_train_DI.shape[0]):
-    X_train_DI[r,:,0] = scaler.fit_transform( X_train_DI[r,:,0])
-    X_train_DI[r,:,1] = scaler.fit_transform( X_train_DI[r,:,1])
-    
 for c in range(0,X_test_D.shape[2]):
     X_test_DI[:,:,:,c] = X_test_D[:,:45*45,c].reshape(X_test_D.shape[0],45,45)
   
 for c in range(0,X_train_D.shape[2]):
     X_train_DI[:,:,:,c] = X_train_D[:,:45*45,c].reshape(X_train_D.shape[0],45,45)
     
-plt.imshow(X_train_DI[12,:,:,1])
+def ShowImgSamples(X_DS,Y_DS,Channel = None):
+    plt.rc('axes', grid=True)
+    plt.rc('figure', figsize=(30, 3))
+    plt.rc('legend', fancybox=True, framealpha=1)
 
-
+    if Channel is None:
+        Channel = 0
+    for faulttype in range(1,11):
+        idxTF = np.in1d(Y_DS,faulttype)
+        idxNo = random.sample(list(np.where(idxTF)[0]),1)
+        plt.subplot(1,10,faulttype)
+        plt.imshow(X_DS[idxNo[0]][:,:,Channel])
+        plt.title("Fault Type "+str(faulttype))
+    plt.show()
+        
+#Channels = ['DE','FE'] 
+c = 0
+ShowImgSamples(X_DS = X_test_DI, Y_DS = Y_test_D, Channel = c)
+c = 1
+ShowImgSamples(X_DS = X_test_DI, Y_DS = Y_test_D, Channel = c)
 """
 Saving to pickle
 """   

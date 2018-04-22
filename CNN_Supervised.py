@@ -52,7 +52,7 @@ print(X_valid.shape[0], 'validation samples')
 CNN modeling
 1 Channel
 """
-CNNch = 1
+CNNch = 2
 
 model = Sequential()
 #1
@@ -98,11 +98,11 @@ Evaluating accuracty on test
 model.load_weights('model.weights.best.hdf5')
 
 # evaluate and print test accuracy
-score = model.evaluate(X_test[:,:,0:CNNch], Y_test, verbose=0)
+score = model.evaluate(X_test[:,:,:,:CNNch], Y_test, verbose=0)
 print('\n', 'CNN Test accuracy:', score[1])
 
-score = model.evaluate(X_train[:,:,0:CNNch], Y_train, verbose=0)
+score = model.evaluate(X_train[:,:,:,0:CNNch], Y_train, verbose=0)
 print('\n', 'CNN train accuracy:', score[1])
 
-score = model.evaluate(X_valid[:,:,0:CNNch], Y_valid, verbose=0)
+score = model.evaluate(X_valid[:,:,:,0:CNNch], Y_valid, verbose=0)
 print('\n', 'CNN validation accuracy:', score[1])
