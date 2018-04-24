@@ -258,7 +258,11 @@ def ShowSamples(X_DS,Y_DS,Channel = None,datapoints = None):
     plt.show()
         
 #Channels = ['DE','FE'] 
+print('Drive End:')
 c = 0
+ShowSamples(X_DS = X_test_D, Y_DS = Y_test_D, Channel = c)
+print('Fan End:')
+c = 1
 ShowSamples(X_DS = X_test_D, Y_DS = Y_test_D, Channel = c)
 
 """
@@ -291,13 +295,15 @@ def ShowImgSamples(X_DS,Y_DS,Channel = None):
     plt.show()
         
 #Channels = ['DE','FE'] 
+print('Drive End:')
 c = 0
 ShowImgSamples(X_DS = X_test_DI, Y_DS = Y_test_D, Channel = c)
+print('Fan End:')
 c = 1
 ShowImgSamples(X_DS = X_test_DI, Y_DS = Y_test_D, Channel = c)
 """
-Saving to pickle
-"""   
+Saving to pickleFan End:
+"""
 pickle_file = os.path.join('./Data/', 'WaveImgDatasets.pickle')
 
 try:

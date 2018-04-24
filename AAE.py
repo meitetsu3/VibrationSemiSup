@@ -13,20 +13,20 @@ modes:
 1: Latent regulation. train generator to fool Descriminator with reconstruction constraint.
 0: Showing latest model results. InOut, true dist, discriminator, latent dist.
 """
-exptitle =  'base_leakyRelu_do60' #experiment title that goes in tensorflow folder name
+exptitle =  'base_leakyRelu_lr00001_do60' #experiment title that goes in tensorflow folder name
 mode= 1
 flg_graph = False # showing graphs or not during the training. Showing graphs significantly slows down the training.
 model_folder = '' # name of the model to be restored. white space means most recent.
 n_leaves = 6  # number of leaves in the mixed 2D Gaussian
-n_epochs_ge = 20 #90*n_leaves # mode 3, generator training epochs
-ac_batch_size = 32  # autoencoder training batch size
-lr = 0.0001
+n_epochs_ge = 30 #90*n_leaves # mode 3, generator training epochs
+ac_batch_size = 64  # autoencoder training batch size
+lr = 0.00001
 import numpy as np
 blanket_resolution = 10*int(np.sqrt(n_leaves)) # blanket resoliution for descriminator or its contour plot
 dc_real_batch_size = int(blanket_resolution*blanket_resolution/15) # descriminator training real dist samplling batch size
 
 keep_prob = 0.60 # keep probability of drop out
-OoT_zWeight = 0.00001 # out of target weight for latent z in generator
+OoT_zWeight = 0.0 # out of target weight for latent z in generator
 n_latent_sample = 1000 # latent code visualization sample
 tb_batch_size = 400  # x_inputs batch size for tb
 tb_log_step = 200  # tb logging step
@@ -55,7 +55,7 @@ from six.moves import cPickle as pickle
 import keras
 from sklearn.preprocessing import OneHotEncoder
 
-# reset graph
+# resFalseet graph
 tf.reset_default_graph()
 
 """
@@ -93,7 +93,6 @@ validation dataset
 ohenc = OneHotEncoder()
 ohenc.fit(Y_train.reshape(-1,1))
 Y_train_OH = ohenc.transform(Y_train.reshape(-1,1)).toarray()
-Y_train_OH.shape
 
 Y_test_OH = keras.utils.to_categorical(Y_test-1, 10)
 
@@ -111,14 +110,14 @@ unif_z = tf.placeholder(dtype=tf.float32, shape=[blanket_resolution*blanket_reso
 unif_d = tf.placeholder(dtype=tf.float32, shape=[None,6],name = 'Uniform_digits')
 is_training = tf.placeholder(tf.bool, shape=(), name='is_training')
 he_init = tf.contrib.layers.variance_scaling_initializer(mode="FAN_AVG")
-
-"""
+True
+"""False
 Util Functions
 """
 def form_results():
     """
     Forms folders for each run to store the tensorboard files, saved models and the log files.
-    :return: three string pointing to tensorboard, saved models and log paths respectively.
+    :return: three string pointing to tensorboard10, saved models and log paths respectively.
     """
     folder_name = "/{0}_{1}_{2}".format(datetime.now().strftime("%Y%m%d%H%M%S"), mode,exptitle)
     tensorboard_path = results_path + folder_name + '/Tensorboard'
@@ -160,7 +159,7 @@ def show_inout(sess,op, ch):
     Shows input MNIST image and reconstracted image.
     Randomly select 10 images from training dataset.
     Parameters. seess:TF session. op: autoencoder operation
-    No return. Displays image.
+    No return. Displays image.alse
     """
     if not flg_graph:
         return
@@ -172,10 +171,10 @@ def show_inout(sess,op, ch):
     plt.tight_layout()
     for i in range(10):
         plt.subplot(2,10,i+1)
-        plt.imshow(img_in[i][:,:,ch],cmap="gray")
+        plt.imshow(img_in[i][:,:,ch])
         plt.axis('off')
         plt.subplot(2,10,10+i+1)
-        plt.imshow(img_out[i][:,:,ch],cmap="gray")
+        plt.imshow(img_out[i][:,:,ch])
         plt.axis('off')
     
     plt.suptitle("Original(1st row) and Decoded(2nd row)")
@@ -209,7 +208,7 @@ def show_latent_code(sess,spc, ch):
         ax.scatter(x, y, label=str(i), alpha=0.9, facecolor=color, linewidth=0.02, s = 10)
     
     ax.legend(loc='center left', markerscale = 3, bbox_to_anchor=(1, 0.5))
-    ax.set_title('2D latent code')    
+    ax.sFalseet_title('2D latent code')    
     plt.show()
     plt.close()
     
@@ -230,7 +229,7 @@ def show_discriminator(sess,digit):
     plt.rc('figure', figsize=(6, 5))
     plt.tight_layout()
     
-    X, Y = np.meshgrid(xlist, ylist)    
+    X, YFalse = np.meshgrid(xlist, ylist)    
     
     with tf.variable_scope("DiscriminatorZ"):
         desc_result = sess.run(tf.nn.sigmoid(discriminator(blanket,digit_v, reuse=True)))
@@ -241,7 +240,7 @@ def show_discriminator(sess,digit):
             Z[i][j]=desc_result[i*br+j]
 
     fig, ax = plt.subplots(1)
-    cp = ax.contourf(X, Y, Z)
+    cp = ax.contourf(X, Z)
     plt.colorbar(cp)
     ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
     ax.set_title('Descriminator Contour for digit '+ str(digit))    
@@ -257,7 +256,7 @@ def show_real_dist(z_real_dist, real_lbl_ins):
     if not flg_graph:
         return
     plt.rc('figure', figsize=(5, 5))
-    plt.tight_layout()
+    plt.Falsetight_layout()
     fig, ax = plt.subplots(1)
     cm = matplotlib.colors.ListedColormap(myColor)
 
@@ -284,20 +283,20 @@ def mlp_enc(x): # multi layer perceptron
             [fully_connected],
             weights_initializer=he_init):
         alpha = 0.2
-        elu1 = fully_connected(x, n_l1,scope='elu1',activation_fn =None)
-        bn1 = tf.contrib.layers.batch_norm(elu1, is_training = is_training,scope='elu1')
+        elu1 = fully_connected(x, n_l1,activation_fn =None)
+        bn1 = tf.contrib.layers.batch_norm(elu1, is_training = is_training)
         bn1 = tf.maximum(alpha * bn1, bn1)
         bn1 = dropout(bn1, keep_prob, is_training=is_training)
-        elu2 = fully_connected(bn1, n_l2,scope='elu2',activation_fn =None)
-        bn2 = tf.contrib.layers.batch_norm(elu2, is_training = is_training,scope='elu2')
+        elu2 = fully_connected(bn1, n_l2,activation_fn =None)
+        bn2 = tf.contrib.layers.batch_norm(elu2, is_training = is_training)
         bn2 = tf.maximum(alpha * bn2, bn2)
         bn2 = dropout(bn2, keep_prob, is_training=is_training)
-        elu3 = fully_connected(bn2, n_l3,scope='elu3',activation_fn =None)
-        bn3 = tf.contrib.layers.batch_norm(elu3, is_training = is_training,scope='elu3')
+        elu3 = fully_connected(bn2, n_l3,activation_fn =None)
+        bn3 = tf.contrib.layers.batch_norm(elu3, is_training = is_training)
         bn3 = tf.maximum(alpha * bn3, bn3)
         bn3 = dropout(bn3, keep_prob, is_training=is_training)
-        elu4 = fully_connected(bn3, n_l4,scope='elu4',activation_fn =None)
-        bn4 = tf.contrib.layers.batch_norm(elu4, is_training = is_training,scope='elu4')
+        elu4 = fully_connected(bn3, n_l4,activation_fn =None)
+        bn4 = tf.contrib.layers.batch_norm(elu4, is_training = is_training)
         bn4 = tf.maximum(alpha * bn4, bn4)
         bn4 = dropout(bn4, keep_prob, is_training=is_training)
     return bn4
@@ -307,20 +306,20 @@ def mlp_dec(x): # multi layer perceptron
             [fully_connected],
             weights_initializer=he_init):
         alpha = 0.2
-        elu4 = fully_connected(x, n_l4,scope='elu4',activation_fn =None)
-        bn1 = tf.contrib.layers.batch_norm(elu4, is_training = is_training, scope='elu4')
+        elu4 = fully_connected(x, n_l4,activation_fn =None)
+        bn1 = tf.contrib.layers.batch_norm(elu4, is_training = is_training)
         bn1 = tf.maximum(alpha * bn1, bn1)
         bn1 = dropout(bn1, keep_prob, is_training=is_training)
-        elu3 = fully_connected(bn1, n_l3,scope='elu3',activation_fn =None)
-        bn2 = tf.contrib.layers.batch_norm(elu3, is_training = is_training, scope='elu3')
+        elu3 = fully_connected(bn1, n_l3,activation_fn =None)
+        bn2 = tf.contrib.layers.batch_norm(elu3, is_training = is_training)
         bn2 = tf.maximum(alpha * bn2, bn2)
         bn2 = dropout(bn2, keep_prob, is_training=is_training)
-        elu2 = fully_connected(bn2, n_l2,scope='elu2',activation_fn =None)
-        bn3 = tf.contrib.layers.batch_norm(elu2, is_training = is_training, scope='elu2')
+        elu2 = fully_connected(bn2, n_l2,activation_fn =None)
+        bn3 = tf.contrib.layers.batch_norm(elu2, is_training = is_training)
         bn3 = tf.maximum(alpha * bn3, bn3)
         bn3 = dropout(bn3, keep_prob, is_training=is_training)
-        elu1 = fully_connected(bn3, n_l1,scope='elu1',activation_fn =None)
-        bn4 = tf.contrib.layers.batch_norm(elu1, is_training = is_training, scope='elu1')
+        elu1 = fully_connected(bn3, n_l1,activation_fn =None)
+        bn4 = tf.contrib.layers.batch_norm(elu1, is_training = is_training)
         bn4 = tf.maximum(alpha * bn4, bn4)
         bn4 = dropout(bn4, keep_prob, is_training=is_training)
     return bn4
@@ -328,14 +327,13 @@ def mlp_dec(x): # multi layer perceptron
 def encoder(x, reuse=False):
     """
     Encoder part of the autoencoder.
-    :param x: input to the autoencoder
+    :param x: input to the autoencoder10
     :param reuse: True -> Reuse the encoder variables, False -> Create the variables
     :return: tensor which is the hidden latent variable of the autoencoder.
     """
-    if reuse:
-        tf.get_variable_scope().reuse_variables()
-    last_layer = mlp_enc(x)
-    outputZ = fully_connected(last_layer, z_dim,weights_initializer=he_init, scope='linZ',activation_fn=None)
+    with tf.variable_scope(tf.get_variable_scope(), reuse=reuse):
+        last_layer = mlp_enc(x)
+        outputZ = fully_connected(last_layer, z_dim,weights_initializer=he_init, scope='linZ',activation_fn=None)
  
     return outputZ
 
@@ -347,10 +345,9 @@ def decoder(z, reuse=False):
     :return: tensor which should ideally be the input given to the encoder.
     tf.sigmoid
     """
-    if reuse:
-        tf.get_variable_scope().reuse_variables()
-    last_layer = mlp_dec(z)
-    output = fully_connected(last_layer, 2, weights_initializer=he_init, activation_fn=None)
+    with tf.variable_scope(tf.get_variable_scope(), reuse=reuse):
+        last_layer = mlp_dec(z)
+        output = fully_connected(last_layer, 2, weights_initializer=he_init, activation_fn=None)
     return output
 
 def discriminator(x, reuse=False):
@@ -359,10 +356,9 @@ def discriminator(x, reuse=False):
     For training, feed the same pair of x and lbl, so it will learn to activate say 3 for 3.
     For generator training, we expect discriminatorY will activate for proper x indicated by the label
     """
-    if reuse:
-        tf.get_variable_scope().reuse_variables()
-    last_layer = mlp_dec(x)
-    output = fully_connected(last_layer, 1, weights_initializer=he_init, scope='None',activation_fn=None)
+    with tf.variable_scope(tf.get_variable_scope(), reuse=reuse):
+        last_layer = mlp_dec(x)
+        output = fully_connected(last_layer, 1, weights_initializer=he_init, scope='None',activation_fn=None)
     return output
 
 def gaussian_mixture(batchsize, num_leaves, sel):
