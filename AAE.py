@@ -14,19 +14,19 @@ modes:
 0: Showing latest model results. InOut, true dist, discriminator, latent dist.
 """
 
-exptitle =  'base_4l_BN_lkeakyrelu01_lr0001_kp60_1_flatten_alha02_bs256_ep1500' #experiment title that goes in tensorflow folder name
-mode= 1
-flg_graph = False # showing graphs or not during the training. Showing graphs significantly slows down the training.
+exptitle =  'base_BN_4l_lkeakyrelu01_lr0001_kp70_1_flatten_alha02_bs768_ep2000' #experiment title that goes in tensorflow folder name
+mode= 0
+flg_graph = True # showing graphs or not during the training. Showing graphs significantly slows down the training.
 model_folder = '' # name of the model to be restored. white space means most recent.
 n_leaves = 6  # number of leaves in the mixed 2D Gaussian
-n_epochs_ge = 1500 #90*n_leaves # mode 3, generator training epochs
-ac_batch_size = 256  # autoencoder training batch size
+n_epochs_ge = 2000 #90*n_leaves # mode 3, generator training epochs
+ac_batch_size = 768  # autoencoder training batch size
 lr = 0.0001
 import numpy as np
 blanket_resolution = 10*int(np.sqrt(n_leaves)) # blanket resoliution for descriminator or its contour plot
 dc_real_batch_size = int(blanket_resolution*blanket_resolution/15) # descriminator training real dist samplling batch size
 
-keep_prob = 0.60 # keep probability of drop out
+keep_prob = 0.70 # keep probability of drop out
 OoT_zWeight = 0.0 # out of target weight for latent z in generator
 n_latent_sample = 1000 # latent code visualization sample
 tb_batch_size = 400  # x_inputs batch size for tb
@@ -57,7 +57,7 @@ from sklearn.preprocessing import OneHotEncoder
 
 # resFalseet graph
 tf.reset_default_graph()
-
+False
 """
 Opening pickled datasets
 """
@@ -290,12 +290,12 @@ def mlp_enc(x): # multi layer perceptron
     #        bn1 = 
 
     l2 = tf.layers.dense(l1, n_l2)
-#    l2 = tf.layers.batch_normalization(l2, training=is_training)
+    l2 = tf.layers.batch_normalization(l2, training=is_training)
     l2 = tf.maximum(alpha * l2, l2)
     l2 = dropout(l2, keep_prob, is_training=is_training)
     
     l3 = tf.layers.dense(l2, n_l2)
-#    l3 = tf.layers.batch_normalization(l3, training=is_training)
+    l3 = tf.layers.batch_normalization(l3, training=is_training)
     l3 = tf.maximum(alpha * l3, l3)
     l3 = dropout(l3, keep_prob, is_training=is_training)
     #        elu4 = fully_connected(bn3, n_l4,activation_fn =None)
@@ -308,17 +308,17 @@ def mlp_dec(x): # multi layer perceptron
 
     alpha = 0.01
     l1 = tf.layers.dense(x, n_l4)
-#    l1 = tf.layers.batch_normalization(l1, training=is_training)
+    l1 = tf.layers.batch_normalization(l1, training=is_training)
     l1 = tf.maximum(alpha * l1, l1)
     l1 = dropout(l1, keep_prob, is_training=is_training)
     
     l2 = tf.layers.dense(l1, n_l3)
-#    l2 = tf.layers.batch_normalization(l2, training=is_training)
+    l2 = tf.layers.batch_normalization(l2, training=is_training)
     l2 = tf.maximum(alpha * l2, l2)
     l2 = dropout(l2, keep_prob, is_training=is_training)
     
     l3 = tf.layers.dense(l2, n_l2)
-#    l3 = tf.layers.batch_normalization(l3, training=is_training)
+    l3 = tf.layers.batch_normalization(l3, training=is_training)
     l3 = tf.maximum(alpha * l3, l3)
     l3 = dropout(l3, keep_prob, is_training=is_training)
 #        elu1 = fully_connected(bn3, n_l1,activation_fn =None)
@@ -438,9 +438,11 @@ all_variables = tf.trainable_variables()
 dc_zvar = [var for var in all_variables if 'DiscriminatorZ/' in var.name]
 ae_var = [var for var in all_variables if ('Encoder/' in var.name or 'Decoder/' in var.name)]
 
-with tf.name_scope("AE_optimizer"):
-    autoencoder_optimizer = tf.train.AdamOptimizer(learning_rate = lr).minimize(autoencoder_loss,var_list=ae_var)
-
+update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+with tf.control_dependencies(update_ops):
+    with tf.name_scope("AE_optimizer"):
+        autoencoder_optimizer = tf.train.AdamOptimizer(learning_rate = lr).minimize(autoencoder_loss,var_list=ae_var)
+    
 with tf.name_scope("DC_optimizer"):
     discriminatorZ_optimizer = tf.train.AdamOptimizer(learning_rate = lr).minimize(dc_zloss, var_list=dc_zvar)
 
@@ -513,7 +515,8 @@ with tf.Session() as sess:
 #                         real_lbl:dc_real_lbl ,unif_z:blanket, unif_d:blanket_d, fake_lbl:batch_y})
                 
                 #Generator
-                sess.run([autoencoder_optimizer],feed_dict={x_input: batch_x,fake_lbl:batch_y,is_training:True})
+                sess.run([autoencoder_optimizer],feed_dict={x_input: batch_x,fake_lbl:batch_y,is_training:True\
+                         ,real_distribution:dc_real_dist, unif_z:blanket})
                 if b % tb_log_step == 0:
                     show_discriminator(sess,1) #shows others like 3, 7 -1 ?
                     show_latent_code(sess,n_latent_sample,0)
