@@ -13,9 +13,10 @@ modes:
 1: Latent regulation. train generator to fool Descriminator with reconstruction constraint.
 0: Showing latest model results. InOut, true dist, discriminator, latent dist.
 """
+
 exptitle =  'base_4l_BN_lkeakyrelu01_lr0001_kp60_1_flatten_alha02_bs256_ep1500' #experiment title that goes in tensorflow folder name
-mode= 0
-flg_graph = True # showing graphs or not during the training. Showing graphs significantly slows down the training.
+mode= 1
+flg_graph = False # showing graphs or not during the training. Showing graphs significantly slows down the training.
 model_folder = '' # name of the model to be restored. white space means most recent.
 n_leaves = 6  # number of leaves in the mixed 2D Gaussian
 n_epochs_ge = 1500 #90*n_leaves # mode 3, generator training epochs
@@ -278,6 +279,7 @@ model Functions
 """
 
 def mlp_enc(x): # multi layer perceptron
+
     alpha = 0.01
 
     l1 = tf.layers.dense(x, n_l1)
@@ -324,6 +326,7 @@ def mlp_dec(x): # multi layer perceptron
 #        bn4 = tf.maximum(alpha * bn4, bn4)
 #        bn4 = dropout(bn4, keep_prob, is_training=is_training)
     return l3
+
 
 def encoder(x, reuse=False):
     """
