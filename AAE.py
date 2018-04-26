@@ -14,19 +14,19 @@ modes:
 0: Showing latest model results. InOut, true dist, discriminator, latent dist.
 """
 
-exptitle =  'base_BN_4l_lkeakyrelu01_lr0001_kp70_1_flatten_alha02_bs768_ep2000' #experiment title that goes in tensorflow folder name
-mode= 0
-flg_graph = True # showing graphs or not during the training. Showing graphs significantly slows down the training.
+exptitle =  'base_CNNe326412864_BN_lkeakyrelu01_lr0001_kp90_bs756_ep800' #experiment title that goes in tensorflow folder name
+mode= 1
+flg_graph = False # showing graphs or not during the training. Showing graphs significantly slows down the training.
 model_folder = '' # name of the model to be restored. white space means most recent.
 n_leaves = 6  # number of leaves in the mixed 2D Gaussian
-n_epochs_ge = 2000 #90*n_leaves # mode 3, generator training epochs
-ac_batch_size = 768  # autoencoder training batch size
+n_epochs_ge = 800 #90*n_leaves # mode 3, generator training epochs
+ac_batch_size = 756  # autoencoder training batch size
 lr = 0.0001
 import numpy as np
 blanket_resolution = 10*int(np.sqrt(n_leaves)) # blanket resoliution for descriminator or its contour plot
 dc_real_batch_size = int(blanket_resolution*blanket_resolution/15) # descriminator training real dist samplling batch size
 
-keep_prob = 0.70 # keep probability of drop out
+keep_prob = 0.90 # keep probability of drop out
 OoT_zWeight = 0.0 # out of target weight for latent z in generator
 n_latent_sample = 1000 # latent code visualization sample
 tb_batch_size = 400  # x_inputs batch size for tb
@@ -35,10 +35,10 @@ dc_contour_res_x = 5 # x to the blanket resolution for descriminator contour plo
 myColor = ['black','orange', 'red', 'blue','gray','green','pink','cyan','Purple','lime','magenta']
 xLU = [-10,10] # blanket x axis lower and upper
 yLU = [-10,10] # blanket y axis lower and upper
-n_l1 = 128
-n_l2 = 128
-n_l3 = 256
-n_l4 = 512
+n_l1 = 32
+n_l2 = 64
+n_l3 = 128
+n_l4 = 64
 z_dim = 2
 results_path = './Results/AAE'
 
@@ -102,7 +102,7 @@ Y_test_OH = keras.utils.to_categorical(Y_test-1, 10)
 Y_test = Y_test_OH
 
 # Placeholders for input data and the targets
-x_input = tf.placeholder(dtype=tf.float32, shape=[None, 45*45*2], name='Input')
+x_input = tf.placeholder(dtype=tf.float32, shape=[None, 45,45,2], name='Input')
 real_distribution = tf.placeholder(dtype=tf.float32, shape=[None, z_dim], name='Real_distribution')
 real_lbl = tf.placeholder(dtype=tf.float32, shape=[None,6],name = 'Real_lable')
 fake_lbl = tf.placeholder(dtype=tf.float32, shape=[None,6],name = 'Fake_lable')
@@ -165,7 +165,7 @@ def show_inout(sess,op, ch):
         return
     idx = random.sample(range(0,len(Y_train)),10)
     img_in = X_train[idx,:,:,:]
-    img_out = sess.run(op, feed_dict={x_input: img_in.reshape(-1,45*45*2),is_training:False})
+    img_out = sess.run(op, feed_dict={x_input: img_in,is_training:False})
     #.reshape(10,28,28)
     plt.rc('figure', figsize=(15, 3))
     plt.tight_layout()
@@ -282,50 +282,58 @@ def mlp_enc(x): # multi layer perceptron
 
     alpha = 0.01
 
-    l1 = tf.layers.dense(x, n_l1)
+    l1 = tf.layers.conv2d(x, n_l1, (3,3), padding='same', activation=None)
     l1 = tf.layers.batch_normalization(l1, training=is_training)
     l1 = tf.maximum(alpha * l1, l1)
     l1 = dropout(l1, keep_prob, is_training=is_training)
+    l1 = tf.layers.max_pooling2d(l1, (2,2), (2,2), padding='same')
+    #23x23
     #        bn1 = tf.contrib.layers.batch_norm(elu1, is_training = is_training)
     #        bn1 = 
-
-    l2 = tf.layers.dense(l1, n_l2)
+    
+    l2 = tf.layers.conv2d(l1, n_l2, (3,3), padding='same', activation=None)
     l2 = tf.layers.batch_normalization(l2, training=is_training)
     l2 = tf.maximum(alpha * l2, l2)
     l2 = dropout(l2, keep_prob, is_training=is_training)
+    l2 = tf.layers.max_pooling2d(l2, (2,2), (2,2), padding='same')
+    #12x12
     
-    l3 = tf.layers.dense(l2, n_l2)
+    l3 = tf.layers.conv2d(l2, n_l3, (3,3), padding='same', activation=None)
     l3 = tf.layers.batch_normalization(l3, training=is_training)
     l3 = tf.maximum(alpha * l3, l3)
     l3 = dropout(l3, keep_prob, is_training=is_training)
+    l3 = tf.layers.max_pooling2d(l3, (2,2), (2,2), padding='same')
+    # 6x6
+    outz = tf.layers.dense(tf.reshape(l3, [-1, 6 * 6 * n_l3]), z_dim,activation=None)
     #        elu4 = fully_connected(bn3, n_l4,activation_fn =None)
     #        bn4 = tf.contrib.layers.batch_norm(elu4, is_training = is_training)
     #        bn4 = tf.maximum(alpha * bn4, bn4)
     #        bn4 = dropout(bn4, keep_prob, is_training=is_training)
-    return l3
+    return outz
 
 def mlp_dec(x): # multi layer perceptron
 
     alpha = 0.01
-    l1 = tf.layers.dense(x, n_l4)
+            
+    l1 = tf.layers.dense(x, 2*2*256)
+    l1 = tf.reshape(l1, (-1, 2, 2, 256))
     l1 = tf.layers.batch_normalization(l1, training=is_training)
     l1 = tf.maximum(alpha * l1, l1)
-    l1 = dropout(l1, keep_prob, is_training=is_training)
-    
-    l2 = tf.layers.dense(l1, n_l3)
+    #2,2
+
+    l2 = tf.layers.conv2d_transpose(l1, 128, 5, strides=2, padding='same')
     l2 = tf.layers.batch_normalization(l2, training=is_training)
     l2 = tf.maximum(alpha * l2, l2)
-    l2 = dropout(l2, keep_prob, is_training=is_training)
+    #4,4
     
-    l3 = tf.layers.dense(l2, n_l2)
+    l3 = tf.layers.conv2d_transpose(l2, 128, 9, strides=2, padding='valid')
     l3 = tf.layers.batch_normalization(l3, training=is_training)
     l3 = tf.maximum(alpha * l3, l3)
-    l3 = dropout(l3, keep_prob, is_training=is_training)
-#        elu1 = fully_connected(bn3, n_l1,activation_fn =None)
-#        bn4 = tf.contrib.layers.batch_norm(elu1, is_training = is_training)
-#        bn4 = tf.maximum(alpha * bn4, bn4)
-#        bn4 = dropout(bn4, keep_prob, is_training=is_training)
-    return l3
+    #15
+
+    logits = tf.layers.conv2d_transpose(l3, 2, 5, strides=3, padding='same')
+
+    return logits
 
 
 def encoder(x, reuse=False):
@@ -336,9 +344,7 @@ def encoder(x, reuse=False):
     :return: tensor which is the hidden latent variable of the autoencoder.
     """
     with tf.variable_scope(tf.get_variable_scope(), reuse=reuse):
-        last_layer = mlp_enc(x)
-        outputZ = tf.layers.dense(last_layer, z_dim,activation=None)
- 
+        outputZ = mlp_enc(x) # 6x6
     return outputZ
 
 def decoder(z, reuse=False):
@@ -351,8 +357,7 @@ def decoder(z, reuse=False):
     """
     with tf.variable_scope(tf.get_variable_scope(), reuse=reuse):
         last_layer = mlp_dec(z)
-        output = tf.layers.dense(last_layer, 45*45*2, activation=None)
-    return output
+    return last_layer
 
 def discriminator(x, reuse=False):
     """
@@ -452,8 +457,8 @@ with tf.name_scope("GE_optimizer"):
 init = tf.global_variables_initializer()
 
 # Reshape immages to display them
-input_images = tf.reshape(x_input, [-1, 45, 45, 2])
-generated_images = tf.reshape(decoder_output, [-1, 45, 45, 2])
+#input_images = tf.reshape(x_input, [-1, 45, 45, 2])
+#generated_images = tf.reshape(decoder_output, [-1, 45, 45, 2])
 
 # Tensorboard visualizationdegit_v
 ae_sm = tf.summary.scalar(name='Autoencoder_Loss', tensor=autoencoder_loss)
@@ -483,14 +488,14 @@ def batch(batch_size):
     Y_train_cpy = Y_train[perm]
     for batch_i in range(0, len(Y_train)//batch_size):
         start_i = batch_i * batch_size
-        X_batch = X_train_cpy[start_i:start_i + batch_size].reshape(-1,45*45*2)
+        X_batch = X_train_cpy[start_i:start_i + batch_size]
         Y_batch = Y_train_cpy[start_i:start_i + batch_size]
         yield X_batch, Y_batch
       
 def tb_write(sess, batch_x, batch_y):
     #reuse the others
     aesm = sess.run(ae_sm,feed_dict={x_input: batch_x, is_training:False})
-    aevsm = sess.run(aev_sm,feed_dict={x_input: X_valid.reshape(-1,45*45*2), is_training:False})
+    aevsm = sess.run(aev_sm,feed_dict={x_input: X_valid, is_training:False})
     writer.add_summary(aesm, global_step=step)
     writer.add_summary(aevsm, global_step=step)
 
@@ -526,7 +531,7 @@ with tf.Session() as sess:
         writer.close()
     if mode==0: # showing the latest model result. InOut, true dist, discriminator, latent dist.
         model_restore(saver,mode,model_folder)
-        show_inout(sess, op=generated_images, ch=0) 
+        show_inout(sess, op=decoder_output, ch=1) 
         #dc_real_lbl = np.eye(6)[np.array(np.random.randint(0,6, size=5000)).reshape(-1)]        
         #dc_real_dist = standardNormal2D(500)
         #show_discriminator(sess,0)    
