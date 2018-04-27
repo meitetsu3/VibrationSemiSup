@@ -14,19 +14,19 @@ modes:
 0: Showing latest model results. InOut, true dist, discriminator, latent dist.
 """
 
-exptitle =  'base_CNNe326412864_BN_lkeakyrelu01_lr0001_kp90_bs756_ep800' #experiment title that goes in tensorflow folder name
+exptitle =  'CNNe32-64-64-128_256-256-128_lkeakyrelu01_lr0001_kp80_bs756_ep500' #experiment title that goes in tensorflow folder name
 mode= 1
 flg_graph = False # showing graphs or not during the training. Showing graphs significantly slows down the training.
 model_folder = '' # name of the model to be restored. white space means most recent.
 n_leaves = 6  # number of leaves in the mixed 2D Gaussian
-n_epochs_ge = 800 #90*n_leaves # mode 3, generator training epochs
+n_epochs_ge = 500 #90*n_leaves # mode 3, generator training epochs
 ac_batch_size = 756  # autoencoder training batch size
 lr = 0.0001
 import numpy as np
 blanket_resolution = 10*int(np.sqrt(n_leaves)) # blanket resoliution for descriminator or its contour plot
 dc_real_batch_size = int(blanket_resolution*blanket_resolution/15) # descriminator training real dist samplling batch size
 
-keep_prob = 0.90 # keep probability of drop out
+keep_prob = 0.80 # keep probability of drop out
 OoT_zWeight = 0.0 # out of target weight for latent z in generator
 n_latent_sample = 1000 # latent code visualization sample
 tb_batch_size = 400  # x_inputs batch size for tb
@@ -37,8 +37,8 @@ xLU = [-10,10] # blanket x axis lower and upper
 yLU = [-10,10] # blanket y axis lower and upper
 n_l1 = 32
 n_l2 = 64
-n_l3 = 128
-n_l4 = 64
+n_l3 = 64
+n_l4 = 128
 z_dim = 2
 results_path = './Results/AAE'
 
@@ -304,7 +304,14 @@ def mlp_enc(x): # multi layer perceptron
     l3 = dropout(l3, keep_prob, is_training=is_training)
     l3 = tf.layers.max_pooling2d(l3, (2,2), (2,2), padding='same')
     # 6x6
-    outz = tf.layers.dense(tf.reshape(l3, [-1, 6 * 6 * n_l3]), z_dim,activation=None)
+    
+    l4 = tf.layers.conv2d(l3, n_l4, (3,3), padding='same', activation=None)
+    l4 = tf.layers.batch_normalization(l4, training=is_training)
+    l4 = tf.maximum(alpha * l4, l4)
+    l4 = dropout(l4, keep_prob, is_training=is_training)
+    l4 = tf.layers.max_pooling2d(l4, (2,2), (2,2), padding='same')
+    
+    outz = tf.layers.dense(tf.reshape(l4, [-1, 3 * 3 * n_l4]), z_dim,activation=None)
     #        elu4 = fully_connected(bn3, n_l4,activation_fn =None)
     #        bn4 = tf.contrib.layers.batch_norm(elu4, is_training = is_training)
     #        bn4 = tf.maximum(alpha * bn4, bn4)
@@ -319,16 +326,19 @@ def mlp_dec(x): # multi layer perceptron
     l1 = tf.reshape(l1, (-1, 2, 2, 256))
     l1 = tf.layers.batch_normalization(l1, training=is_training)
     l1 = tf.maximum(alpha * l1, l1)
+    l1 = dropout(l1, keep_prob, is_training=is_training)
     #2,2
 
-    l2 = tf.layers.conv2d_transpose(l1, 128, 5, strides=2, padding='same')
+    l2 = tf.layers.conv2d_transpose(l1, 256, 5, strides=2, padding='same')
     l2 = tf.layers.batch_normalization(l2, training=is_training)
     l2 = tf.maximum(alpha * l2, l2)
+    l2 = dropout(l2, keep_prob, is_training=is_training)
     #4,4
     
     l3 = tf.layers.conv2d_transpose(l2, 128, 9, strides=2, padding='valid')
     l3 = tf.layers.batch_normalization(l3, training=is_training)
     l3 = tf.maximum(alpha * l3, l3)
+    l3 = dropout(l3, keep_prob, is_training=is_training)
     #15
 
     logits = tf.layers.conv2d_transpose(l3, 2, 5, strides=3, padding='same')
