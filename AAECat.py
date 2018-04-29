@@ -10,7 +10,7 @@ modes:
 """
 exptitle =  'lbl100base1' #experiment title that goes in tensorflow folder name
 mode = 1
-flg_graph = False # showing graphs or not during the training. Showing graphs significantly slows down the training.
+flg_graph = True # showing graphs or not during the training. Showing graphs significantly slows down the training.
 model_folder = '' # name of the model to be restored. white space means most recent.
 n_label = 100 # number of labels used in semi-supervised training
 bs_ae = 2000  # autoencoder training batch size
@@ -112,9 +112,6 @@ z_real = tf.placeholder(dtype=tf.float32, shape=[None, z_dim], name='z_real')
 z_blanket = tf.placeholder(dtype=tf.float32, shape=[res_blanket*res_blanket, z_dim], name='z_blanket')
 y_Zblanket = tf.placeholder(dtype=tf.float32, shape=[None,n_leaves],name = 'y_Zblanket')
 y_Zreal = tf.placeholder(dtype=tf.float32, shape=[None,n_leaves],name = 'y_Zreal')
-y_real = tf.placeholder(dtype=tf.float32, shape=[None,n_leaves],name = 'y_real') # jittering
-y_blanket = tf.placeholder(dtype=tf.float32, shape=[None,n_leaves],name = 'y_blanket') # not integers
-
 is_training = tf.placeholder(tf.bool, shape=(), name='is_training')
 he_init = tf.contrib.layers.variance_scaling_initializer(mode="FAN_AVG")
 
@@ -206,17 +203,15 @@ def show_latent_code(sess):
     plt.tight_layout()
     
     with tf.variable_scope("Encoder"):
-        train_zs,train_ys = sess.run(encoder(X_train, reuse=True), feed_dict={is_training:False}) #2 is test, 10k images
-    train_yi = np.argmax(train_ys, axis=1) 
-    zm = gaussian_mixture(train_zs, n_leaves, train_yi)
+        train_zs = sess.run(encoder_outputZ, feed_dict={x_train:X_train.reshape(-1,45*45*2),is_training:False}) #2 is test, 10k images
+
     train_lbl = Y_train
-    train_lbli = np.argmax(train_lbl, axis=1)
     cm = matplotlib.colors.ListedColormap(myColor)
     fig, ax = plt.subplots(1)
     
     for i in range(n_leaves):
-        y=zm[np.where(train_lbl[:,i]==1),1][0,:]
-        x=zm[np.where(train_lbl[:,i]==1),0][0,:]
+        y=train_zs[np.where(train_lbl[:,i]==1),1][0,:]
+        x=train_zs[np.where(train_lbl[:,i]==1),0][0,:]
         color = cm(i)
         ax.scatter(x, y, label=str(i), alpha=0.9, facecolor=color, linewidth=0.02, s = 10)
     
@@ -225,12 +220,6 @@ def show_latent_code(sess):
     plt.show()
     plt.close()
     
-    test_accuracy = 100.0*np.mean(np.equal(train_lbli, train_yi))
-
-    np.set_printoptions(precision=1)
-    print("Test Accuracy:{}%".format(test_accuracy))
-    print("Y logits of top 5 test images :")
-    print(train_ys[0:4])
     
 def show_z_discriminator(sess,digit):
     """
@@ -245,9 +234,9 @@ def show_z_discriminator(sess,digit):
     
     if digit==-1:
         #y_input = (np.random.uniform(-100,100,10*br*br)).astype('float32').reshape(br*br,10)
-        y_input = np.full([br*br,10],0.05,dtype="float32")
+        y_input = np.full([br*br,6],0.05,dtype="float32")
     else:
-        y_input = np.eye(10,dtype="float32")[np.full([br*br],digit)]
+        y_input = np.eye(6,dtype="float32")[np.full([br*br],digit)]
     
     plt.rc('figure', figsize=(6, 5))
     plt.tight_layout()
@@ -391,11 +380,14 @@ def gaussian_mixture(z, num_leaves, selector):
     
     return z
 
-def gaussian(batchsize):
+def conditional_gaussian(y):
     """
-    Crate true z, 2D standard normal distribution
+    Crate true z, 2D standard normal distribution with specified postion by y one hot encoding vector
     """
-    return np.random.normal(0, 1, (batchsize, 2))
+    digits = [np.where(r==1)[0][0] for r in y ]
+    centerlist = [(0,0),(1,1),(3,1),(2,2),(1,3),(2,3)]
+    centers = [centerlist[i] for i in digits]
+    return np.random.normal(0, 0.2, (len(y), 2))+centers
  
 """
 Defining key operations, Loess, Optimizer and other necessary operations
@@ -488,9 +480,9 @@ def batch(batch_size):
         
 def tb_write(sess,batch_x,batch_y):
     # use the priviousely generated data for others
-    sm = sess.run(summary_op,feed_dict={is_training:False, y_test:Y_valid,y_real:real_y, \
+    sm = sess.run(summary_op,feed_dict={is_training:False, y_test:Y_valid, \
             x_train:batch_x, y_train:batch_y, z_real:real_z,y_Zblanket:Zblanket_y,y_Zreal:Zreal_y\
-            ,z_blanket:blanket_z, y_blanket:blanket_y})
+            ,z_blanket:blanket_z})
     writer.add_summary(sm, global_step=step)
 
 with tf.Session(config=config) as sess:
@@ -505,19 +497,16 @@ with tf.Session(config=config) as sess:
                 #Discriminator
                 batch_x, batch_y = next(bt)
                 Zreal_y = np.eye(6)[np.random.randint(0,n_leaves, size=bs_z_real)]
-                real_y = np.eye(6)[np.random.randint(0,n_leaves, size=bs_z_real)]+np.random.normal(0.0,jit_std,(bs_z_real,6))
                 Zblanket_y = np.eye(6)[np.random.randint(0,n_leaves, size=res_blanket*res_blanket)]
-                real_z = gaussian(bs_z_real)
-          
-                blanket_y = (np.random.uniform(-3,3,6*res_blanket*res_blanket)).astype('float32').reshape(res_blanket*res_blanket,6)
-      
+                real_z = conditional_gaussian(Zreal_y)
+                print(real_z)
                 sess.run([discriminator_optimizer],feed_dict={is_training:True,\
-                        x_train:batch_x, y_train:batch_y,y_Zreal:Zreal_y, y_Zblanket:Zblanket_y,y_real:real_y,\
-                        z_real:real_z, z_blanket:blanket_z, y_blanket:blanket_y})
+                        x_train:batch_x, y_train:batch_y,y_Zreal:Zreal_y, y_Zblanket:Zblanket_y,\
+                        z_real:real_z, z_blanket:blanket_z})
     
                 #Generator - autoencoder, fooling descriminator, and y semi-supervised classification
-                sess.run([generator_optimizer],feed_dict={is_training:True,\
-                         x_train:batch_x, x_train:batch_x, y_train:batch_y})
+                sess.run([generator_optimizer],feed_dict={is_training:True\
+                         ,x_train:batch_x, y_train:batch_y})
                 if b % step_tb_log == 0:
                     show_z_discriminator(sess,1)  
                     show_z_discriminator(sess,4)  # [0,0,0,0,1,0,0,0,0,0]
@@ -530,7 +519,7 @@ with tf.Session(config=config) as sess:
     if mode==0: # showing the latest model result. InOut, true dist, discriminator, latent dist.
         model_restore(saver,mode,model_folder)
         show_inout(sess, op=decoder_output)         
-        real_z= gaussian(5000)
+        real_z= conditional_gaussian(5000)
         show_z_dist(real_z)
         show_z_discriminator(sess,1)  
         show_z_discriminator(sess,4)  # [0,0,0,0,1,0,0,0,0,0]
