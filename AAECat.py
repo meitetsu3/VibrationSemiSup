@@ -8,13 +8,13 @@ modes:
 1: Latent regulation. train generator to fool Descriminator with reconstruction constraint.
 0: Showing latest model results. InOut, true dist, discriminator, latent dist.
 """
-exptitle =  'base' #experiment title that goes in tensorflow folder name
+exptitle =  'base_kp97' #experiment title that goes in tensorflow folder name
 mode = 1
 flg_graph = False # showing graphs or not during the training. Showing graphs significantly slows down the training.
 model_folder = '' # name of the model to be restored. white space means most recent.
 
 bs_ae = 2000  # autoencoder training batch size
-keep_prob = 1.00 # keep probability of drop out
+keep_prob = 0.97 # keep probability of drop out
 w_zfool = 0.01 # weight on z fooling
 w_yfool = 0.01 # weight on y fooling
 w_ae_loss = 1.00 # weight on autoencoding reconstuction loss
@@ -25,7 +25,7 @@ n_pretrain = 0 # pre supervised training step
 
 import numpy as np
 res_blanket = 10*int(np.sqrt(n_leaves)) # blanket resoliution for descriminator or its contour plot
-bs_z_real = int(res_blanket*res_blanket/15) # descriminope='elu2'ator training z real dist samplling batch size
+bs_z_real = int(res_blanket*res_blanket/2) # descriminator training z real dist samplling batch size
 bs_ae_tb = 800  # x_inputs batch size for tb
 step_tb_log = 800  # tb logging step
 import tensorflow as tf
@@ -38,8 +38,13 @@ myColor = ['black','orange', 'red', 'blue','gray','green','pink','cyan','lime','
 input_dim = 45*45*2
 xLU = [-2,5] # blanket x axis lower and upper
 yLU = [-2,5] # blanket y axis lower and upper
-n_l1 = 1000
-n_l2 = 1000
+n_l1 = 512
+n_l2 = 256
+n_l3 = 256
+n_l4 = 256
+n_l5 = 256
+n_l6 = 256
+n_l7 = 256
 z_dim = 2
 results_path = './Results/Adversarial_Autoencoder'
 
@@ -188,7 +193,7 @@ def show_inout(sess,op,ch):
     plt.show()
     plt.close()
 
-def show_latent_code(sess):
+def show_latent_code(sess, X, Y, n_leaves):
     """
     Shows latent codes distribution 
     Parameters. seess:TF session.
@@ -199,15 +204,14 @@ def show_latent_code(sess):
     plt.tight_layout()
     
     with tf.variable_scope("Encoder"):
-        train_zs = sess.run(encoder_outputZ, feed_dict={x_train:X_train.reshape(-1,45*45*2),is_training:False}) #2 is test, 10k images
+        train_zs = sess.run(encoder_outputZ, feed_dict={x_train:X.reshape(-1,45*45*2),is_training:False}) #2 is test, 10k images
 
-    train_lbl = Y_train
     cm = matplotlib.colors.ListedColormap(myColor)
     fig, ax = plt.subplots(1)
     
     for i in range(n_leaves):
-        y=train_zs[np.where(train_lbl[:,i]==1),1][0,:]
-        x=train_zs[np.where(train_lbl[:,i]==1),0][0,:]
+        y=train_zs[np.where(Y[:,i]==1),1][0,:]
+        x=train_zs[np.where(Y[:,i]==1),0][0,:]
         color = cm(i)
         ax.scatter(x, y, label=str(i), alpha=0.9, facecolor=color, linewidth=0.02, s = 10)
     
@@ -283,15 +287,45 @@ model Functions
 """
 
 def mlp_enc(x): # multi layer perceptron
-    with tf.contrib.framework.arg_scope(
-            [fully_connected],
-            weights_initializer=he_init):
-        X_drop = dropout(x, keep_prob, is_training = is_training)
-        relu1 = fully_connected(X_drop, n_l1,scope='relu1')
-        relu1_drop = dropout(relu1, keep_prob, is_training=is_training)
-        relu2 = fully_connected(relu1_drop, n_l2,scope='relu2')
-        relu2_drop = dropout(relu2, keep_prob, is_training=is_training)
-    return relu2_drop
+
+    alpha = 0.01
+
+    l1 = tf.layers.dense(x, n_l1)
+    l1 = tf.layers.batch_normalization(l1, training=is_training)
+    l1 = tf.maximum(alpha * l1, l1)
+    l1 = dropout(l1, keep_prob, is_training=is_training)
+    #        bn1 = tf.contrib.layers.batch_norm(elu1, is_training = is_training)
+    #        bn1 = 
+
+    l2 = tf.layers.dense(l1, n_l2)
+    l2 = tf.layers.batch_normalization(l2, training=is_training)
+    l2 = tf.maximum(alpha * l2, l2)
+    l2 = dropout(l2, keep_prob, is_training=is_training)
+    
+    l3 = tf.layers.dense(l2, n_l3)
+    l3 = tf.layers.batch_normalization(l3, training=is_training)
+    l3 = tf.maximum(alpha * l3, l3)
+    l3 = dropout(l3, keep_prob, is_training=is_training)
+    
+    l4 = tf.layers.dense(l3, n_l4)
+    l4 = tf.layers.batch_normalization(l4, training=is_training)
+    l4 = tf.maximum(alpha * l4, l4)
+    l4 = dropout(l4, keep_prob, is_training=is_training)
+    
+    l5 = tf.layers.dense(l4, n_l5)
+    l5 = tf.layers.batch_normalization(l4, training=is_training)
+    l5 = tf.maximum(alpha * l5, l5)
+    l5 = dropout(l5, keep_prob, is_training=is_training)
+    
+    l6 = tf.layers.dense(l5, n_l6)
+    l6 = tf.layers.batch_normalization(l6, training=is_training)
+    l6 = tf.maximum(alpha * l6, l6)
+    l6 = dropout(l6, keep_prob, is_training=is_training)
+    #        elu4 = fully_connected(bn3, n_l4,activation_fn =None)
+    #        bn4 = tf.contrib.layers.batch_norm(elu4, is_training = is_training)
+    #        bn4 = tf.maximum(alpha * bn4, bn4)
+    #        bn4 = dropout(bn4, keep_prob, is_training=is_training)
+    return l6
 
 def mlp_dec(x): # multi layer perceptron
     with tf.contrib.framework.arg_scope(
@@ -383,7 +417,7 @@ def conditional_gaussian(y):
     digits = [np.where(r==1)[0][0] for r in y ]
     centerlist = [(0,0),(1,1),(3,1),(2,2),(1,3),(2,3)]
     centers = [centerlist[i] for i in digits]
-    return np.random.normal(0, 0.2, (len(y), 2))+centers
+    return np.random.normal(0, 0.1, (len(y), 2))+centers
  
 """
 Defining key operations, Loess, Optimizer and other necessary operations
@@ -507,7 +541,7 @@ with tf.Session(config=config) as sess:
                     show_z_discriminator(sess,1)  
                     show_z_discriminator(sess,4)  # [0,0,0,0,1,0,0,0,0,0]
                     show_z_discriminator(sess,-1) 
-                    show_latent_code(sess)
+                    show_latent_code(sess,batch_x,batch_y,n_leaves=6)
                     tb_write(sess,batch_x,batch_y)
                 step += 1
         saver.save(sess, save_path=saved_model_path, global_step=step, write_meta_graph = True)
@@ -520,7 +554,8 @@ with tf.Session(config=config) as sess:
         Zreal_y = np.eye(6)[np.random.randint(0,n_leaves, size=bs_z_real)]
         real_z = conditional_gaussian(Zreal_y)
         show_z_dist(real_z)
-        show_latent_code(sess)
+        show_latent_code(sess,X_train,Y_train,n_leaves=6)
+        show_latent_code(sess,X_test,Y_test,n_leaves=10)
         
             
         
