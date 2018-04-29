@@ -16,7 +16,7 @@ modes:
 
 exptitle =  'BN_512-256-256-256-256-256-256_lkeakyrelu01_lr001_kp85_1_flatten_alha02_bs1024_ep400' #experiment title that goes in tensorflow folder name
 mode= 1
-flg_graph = False # showing graphs or not during the training. Showing graphs significantly slows down the training.
+flg_graph = True # showing graphs or not during the training. Showing graphs significantly slows down the training.
 model_folder = '' # name of the model to be restored. white space means most recent.
 n_leaves = 6  # number of leaves in the mixed 2D Gaussian
 n_epochs_ge = 400 #90*n_leaves # mode 3, generator training epochs
@@ -52,6 +52,7 @@ import os
 import matplotlib
 import matplotlib.pyplot as plt
 import random
+from numpy import array, exp
 from math import cos,sin
 from tqdm import tqdm
 from six.moves import cPickle as pickle
@@ -198,50 +199,54 @@ def show_latent_code(sess,spc, ch):
     plt.tight_layout()
     
     with tf.variable_scope("Encoder"):
-        train_zs,train_ys = sess.run(encoder(X_train, reuse=True))
+        train_zs = sess.run(encoder_outputZ,feed_dict={x_input:X_train.reshape(-1,45*45*2),is_training:True})
+
     ytrain = Y_train
     
     cm = matplotlib.colors.ListedColormap(myColor[1:])
     
     fig, ax = plt.subplots(1)
     
-    for i in range(10):
+    for i in range(6):
         y=train_zs[np.where(ytrain[:,i]==1),1][0,0:spc]
         x=train_zs[np.where(ytrain[:,i]==1),0][0,0:spc]
         color = cm(i)
         ax.scatter(x, y, label=str(i), alpha=0.9, facecolor=color, linewidth=0.02, s = 10)
     
     ax.legend(loc='center left', markerscale = 3, bbox_to_anchor=(1, 0.5))
-    ax.sFalseet_title('2D latent co768de')    
+    ax.set_title('2D latent code')    
     plt.show()
     plt.close()
     
+
 def show_discriminator(sess):
-    """
+    """X_train
     Shows discriminator activation contour plot. Close to 1 means estimated as positive (true dist).
     Parameters. seess:TF session.
     No return. Displays image.
     """
     if not flg_graph:
         return
-    br = dc_contour_res_x*blanket_resolution
+    br = blanket_resolution
     xlist, ylist, blanket = get_blanket(br)
 
     plt.rc('figure', figsize=(6, 5))
     plt.tight_layout()
     
-    X, YFalse = np.meshgrid(xlist, ylist)    
-    
+    X, Y = np.meshgrid(xlist, ylist)    
+ 
     with tf.variable_scope("DiscriminatorZ"):
-        desc_result = sess.run(tf.nn.sigmoid(discriminator(blanket, reuse=True)))
+        desc_result = sess.run(dz_blanket,feed_dict={unif_z:blanket,is_training:True})
 
+    desc_result = 1 / (1 + exp(-desc_result))
+    
     Z = np.empty((br,br), dtype="float32")    
     for i in range(br):
         for j in range(br):
             Z[i][j]=desc_result[i*br+j]
 
     fig, ax = plt.subplots(1)
-    cp = ax.contourf(X, Z)
+    cp = ax.contourf(X,Y,Z)
     plt.colorbar(cp)
     ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
     ax.set_title('Descriminator Contour')    
@@ -378,7 +383,6 @@ def decoder(z, reuse=False):
     :param x: input to the decoder
     :param reuse: True -> Reuse the decoder variables, False -> Create the variables
     :return: tensor which should ideally be the input given to the encoder.
-    tf.sigmoid
     """
     with tf.variable_scope(tf.get_variable_scope(), reuse=reuse):
         last_layer = mlp_dec(z)
@@ -522,8 +526,11 @@ def tb_write(sess, batch_x, batch_y):
     #reuse the others
     aesm = sess.run(ae_sm,feed_dict={x_input: batch_x, is_training:False})
     aevsm = sess.run(aev_sm,feed_dict={x_input: X_valid.reshape(-1,45*45*2), is_training:False})
+    gesm = sess.run(ge_sm,feed_dict={x_input: X_valid.reshape(-1,45*45*2), real_distribution:dc_real_dist, 
+                                     is_training:False})
     writer.add_summary(aesm, global_step=step)
     writer.add_summary(aevsm, global_step=step)
+    writer.add_summary(gesm, global_step=step)
 
 with tf.Session() as sess:
     if mode==1: # Latent regulation
@@ -539,14 +546,11 @@ with tf.Session() as sess:
                 # real batch uniform sampling for each lable and unknown label. This is not constrained by lable availability.
                 dc_real_lbl = np.eye(6)[np.array(np.random.randint(0,6, size=dc_real_batch_size)).reshape(-1)]+np.random.normal(0,0.5)
                 dc_real_dist = standardNormal2D(dc_real_batch_size)# or maybe we can make this only smaller
-                
-                blanket_d = np.eye(6)[np.array(np.random.randint(0,6, size=blanket_resolution*blanket_resolution)).reshape(-1)]
-#                blanket_y = np.random.uniform(-10, 10, (blanket_resolution*blanket_resolution,6))
-#                sess.run([discriminatorZ_optimizer],feed_dict={x_input: batch_x, real_distribution:dc_real_dist,\
-#                         real_lbl:dc_real_lbl ,unif_z:blanket, unif_d:blanket_d, fake_lbl:batch_y})
+                sess.run([discriminatorZ_optimizer],feed_dict={x_input: batch_x, real_distribution:dc_real_dist,\
+                         is_training:True,real_lbl:dc_real_lbl ,unif_z:blanket})
                 
                 #Generator
-                sess.run([autoencoder_optimizer],feed_dict={x_input: batch_x,fake_lbl:batch_y,is_training:True\
+                sess.run([generator_optimizer],feed_dict={x_input: batch_x,fake_lbl:batch_y,is_training:True\
                          ,real_distribution:dc_real_dist, unif_z:blanket})
                 if b % tb_log_step == 0:
                     show_discriminator(sess) #shows others like 3, 7 -1 ?
@@ -557,9 +561,9 @@ with tf.Session() as sess:
         writer.close()
     if mode==0: # showing the latest model result. InOut, true dist, discriminator, latent dist.
         model_restore(saver,mode,model_folder)
-        show_inout(sess, op=generated_images, ch=0)       
-        dc_real_dist = standardNormal2D(500)
-        show_discriminator(sess)    
+        show_inout(sess, op=generated_images, ch=1)       
+        #dc_real_dist = standardNormal2D(500)
+        #show_discriminator(sess)    
         #show_latent_code(sess,n_latent_sample)
         
     
