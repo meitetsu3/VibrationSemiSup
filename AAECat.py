@@ -8,21 +8,19 @@ modes:
 1: Latent regulation. train generator to fool Descriminator with reconstruction constraint.
 0: Showing latest model results. InOut, true dist, discriminator, latent dist.
 """
-exptitle =  'lbl100base1' #experiment title that goes in tensorflow folder name
+exptitle =  'base' #experiment title that goes in tensorflow folder name
 mode = 1
-flg_graph = True # showing graphs or not during the training. Showing graphs significantly slows down the training.
+flg_graph = False # showing graphs or not during the training. Showing graphs significantly slows down the training.
 model_folder = '' # name of the model to be restored. white space means most recent.
-n_label = 100 # number of labels used in semi-supervised training
+
 bs_ae = 2000  # autoencoder training batch size
 keep_prob = 1.00 # keep probability of drop out
 w_zfool = 0.01 # weight on z fooling
 w_yfool = 0.01 # weight on y fooling
-w_classfication = 0.01 #classification weight in generator
-w_VtxReg = 0.01 # Training distance to vertex weight
 w_ae_loss = 1.00 # weight on autoencoding reconstuction loss
 jit_std = 0.05 # Y real jittering stdev
 n_leaves = 6 # number of leaves in the mixed 2D Gaussian
-n_epochs_ge = 5*n_leaves # mode 3, generator training epochs
+n_epochs_ge = 50*n_leaves # mode 3, generator training epochs
 n_pretrain = 0 # pre supervised training step
 
 import numpy as np
@@ -38,8 +36,8 @@ config.gpu_options.per_process_gpu_memory_fraction = 0.2 # can run up to 4 threa
 x_blanket_vis = 5 # x to the blanket resolution for descriminator contour plot
 myColor = ['black','orange', 'red', 'blue','gray','green','pink','cyan','lime','magenta']
 input_dim = 45*45*2
-xLU = [-10,10] # blanket x axis lower and upper
-yLU = [-10,10] # blanket y axis lower and upper
+xLU = [-2,5] # blanket x axis lower and upper
+yLU = [-2,5] # blanket y axis lower and upper
 n_l1 = 1000
 n_l2 = 1000
 z_dim = 2
@@ -163,7 +161,7 @@ def next_batch(x, y, batch_size):
 """
 Vis Functions
 """
-def show_inout(sess,op):
+def show_inout(sess,op,ch):
     """
     Shows input MNIST image and reconstracted image.
     Randomly select 10 images from training dataset.
@@ -173,19 +171,17 @@ def show_inout(sess,op):
     if not flg_graph:
         return
     idx = random.sample(range(len(Y_train)),bs_ae)
-    img_in = X_train[idx,:]
-    img_out = sess.run(op, feed_dict={x_train: img_in,is_training:False})
-    img_out_s = img_out.reshape(bs_ae,45,45,2)
-    img_in_s = img_in.reshape(bs_ae,45,45,2)
+    img_in = X_train[idx,:,:,:]
+    img_out = sess.run(op, feed_dict={x_train: img_in.reshape(-1,45*45*2),is_training:False})
     #.reshape(10,28,28)
     plt.rc('figure', figsize=(15, 3))
     plt.tight_layout()
     for i in range(10):
         plt.subplot(2,10,i+1)
-        plt.imshow(img_in_s[i],cmap="gray")
+        plt.imshow(img_in[i][:,:,ch])
         plt.axis('off')
         plt.subplot(2,10,10+i+1)
-        plt.imshow(img_out_s[i],cmap="gray")
+        plt.imshow(img_out[i][:,:,ch])
         plt.axis('off')
     
     plt.suptitle("Original(1st row) and Decoded(2nd row)")
@@ -194,7 +190,7 @@ def show_inout(sess,op):
 
 def show_latent_code(sess):
     """
-    Shows latent codes distribution (y and z) based on all MNIST test images, and print accuracy
+    Shows latent codes distribution 
     Parameters. seess:TF session.
     """
     if not flg_graph:
@@ -236,7 +232,7 @@ def show_z_discriminator(sess,digit):
         #y_input = (np.random.uniform(-100,100,10*br*br)).astype('float32').reshape(br*br,10)
         y_input = np.full([br*br,6],0.05,dtype="float32")
     else:
-        y_input = np.eye(6,dtype="float32")[np.full([br*br],digit)]
+        y_input = np.eye(6,dtype="float32")[np.full([br*br],digit-1)]
     
     plt.rc('figure', figsize=(6, 5))
     plt.tight_layout()
@@ -499,7 +495,7 @@ with tf.Session(config=config) as sess:
                 Zreal_y = np.eye(6)[np.random.randint(0,n_leaves, size=bs_z_real)]
                 Zblanket_y = np.eye(6)[np.random.randint(0,n_leaves, size=res_blanket*res_blanket)]
                 real_z = conditional_gaussian(Zreal_y)
-                print(real_z)
+ 
                 sess.run([discriminator_optimizer],feed_dict={is_training:True,\
                         x_train:batch_x, y_train:batch_y,y_Zreal:Zreal_y, y_Zblanket:Zblanket_y,\
                         z_real:real_z, z_blanket:blanket_z})
@@ -518,37 +514,12 @@ with tf.Session(config=config) as sess:
         writer.close()
     if mode==0: # showing the latest model result. InOut, true dist, discriminator, latent dist.
         model_restore(saver,mode,model_folder)
-        show_inout(sess, op=decoder_output)         
-        real_z= conditional_gaussian(5000)
+        show_z_discriminator(sess,1)
+        show_z_discriminator(sess,6)
+        show_inout(sess, op=generated_images, ch=0)     
+        Zreal_y = np.eye(6)[np.random.randint(0,n_leaves, size=bs_z_real)]
+        real_z = conditional_gaussian(Zreal_y)
         show_z_dist(real_z)
-        show_z_discriminator(sess,1)  
-        show_z_discriminator(sess,4)  # [0,0,0,0,1,0,0,0,0,0]
-        show_z_discriminator(sess,-1) 
-        vtx = np.array([[1,0,0,0,0,0,0,0,0,0]
-                        ,[0,1,0,0,0,0,0,0,0,0]
-                        ,[0,0,1,0,0,0,0,0,0,0]
-                        ,[0,0,0,1,0,0,0,0,0,0]
-                        ,[0,0,0,0,1,0,0,0,0,0]
-                        ,[0,0,0,0,0,1,0,0,0,0]
-                        ,[0,0,0,0,0,0,1,0,0,0]
-                        ,[0,0,0,0,0,0,0,1,0,0]
-                        ,[0,0,0,0,0,0,0,0,1,0]
-                        ,[0,0,0,0,0,0,0,0,0,1]],dtype='float32')
-        nvtx = np.array([[0,0,0,0,0,0,0,0,0,0]
-                        ,[0.1,0,0,0,0,0,0,0,0,0]
-                        ,[5,5,5,5,5,5,5,5,5,5]
-                        ,[0,0,0,0.3,0,0,0,0,0,0]
-                        ,[0,0,0,0,0.4,0,0,0,0,0]
-                        ,[0,0,0,0,0,0.5,0,0,0,0]
-                        ,[0,0,0,0,0,0,0.9,0,0,0]
-                        ,[0,0,0,0,0,0,0,0.95,0,0]
-                        ,[0,0,0,0,0,0,0,0,0.99,0]
-                        ,[1,0,0,0,0,0,0,0,0,0.99]],dtype='float32')
-        with tf.variable_scope("DiscriminatorY"):
-            v = sess.run(tf.nn.sigmoid(discriminator_y(vtx, reuse=True)),feed_dict={is_training:False})
-            nv = sess.run(tf.nn.sigmoid(discriminator_y(nvtx, reuse=True)),feed_dict={is_training:False})
-        print(v)
-        print(nv)
         show_latent_code(sess)
         
             
