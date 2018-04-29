@@ -532,6 +532,7 @@ def tb_write(sess, batch_x, batch_y):
     writer.add_summary(aevsm, global_step=step)
     writer.add_summary(gesm, global_step=step)
 
+
 with tf.Session() as sess:
     if mode==1: # Latent regulation
         writer,saved_model_path = tb_init(sess)   

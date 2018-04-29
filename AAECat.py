@@ -1,15 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu Nov 16 11:50:32 2017
-ref: https://github.com/Naresh1318/Adversarial_Autoencoder
-@author: mtodaka
-: one combined discriminator with categorical
-: hold off Y regulation for a while with maxnorm?
-: discriminator vis and initial training
-: stop when autoencoder loss increase on validation set
-: separate? reconstruction, descriminator, generater, semi-supervised
-: learning rate schedule
-:feed mode to run ./file
+Meitetsu Todaka
 """
 
 """
@@ -23,7 +14,6 @@ flg_graph = False # showing graphs or not during the training. Showing graphs si
 model_folder = '' # name of the model to be restored. white space means most recent.
 n_label = 100 # number of labels used in semi-supervised training
 bs_ae = 2000  # autoencoder training batch size
-bs_ss = 16 # semi-supervised training batch size
 keep_prob = 1.00 # keep probability of drop out
 w_zfool = 0.01 # weight on z fooling
 w_yfool = 0.01 # weight on y fooling
@@ -31,7 +21,7 @@ w_classfication = 0.01 #classification weight in generator
 w_VtxReg = 0.01 # Training distance to vertex weight
 w_ae_loss = 1.00 # weight on autoencoding reconstuction loss
 jit_std = 0.05 # Y real jittering stdev
-n_leaves = 10 # number of leaves in the mixed 2D Gaussian
+n_leaves = 6 # number of leaves in the mixed 2D Gaussian
 n_epochs_ge = 5*n_leaves # mode 3, generator training epochs
 n_pretrain = 0 # pre supervised training step
 
@@ -47,7 +37,7 @@ config.gpu_options.per_process_gpu_memory_fraction = 0.2 # can run up to 4 threa
 #config.allow_soft_placement=True
 x_blanket_vis = 5 # x to the blanket resolution for descriminator contour plot
 myColor = ['black','orange', 'red', 'blue','gray','green','pink','cyan','lime','magenta']
-input_dim = 784
+input_dim = 45*45*2
 xLU = [-10,10] # blanket x axis lower and upper
 yLU = [-10,10] # blanket y axis lower and upper
 n_l1 = 1000
@@ -61,15 +51,58 @@ from datetime import datetime
 import os
 import matplotlib
 import matplotlib.pyplot as plt
-from tensorflow.examples.tutorials.mnist import input_data
+from six.moves import cPickle as pickle
+from sklearn.preprocessing import OneHotEncoder
+import keras
 import random
 from tqdm import tqdm
 
 # reset graph
 tf.reset_default_graph()
 
-# Get the MNIST data
-mnist = input_data.read_data_sets('./Data', one_hot=True)
+# Get the vabration data
+"""
+Opening pickled datasets
+"""
+
+pfile = r"./Data/WaveImgDatasets.pickle"
+with (open(pfile, "rb")) as openfile:
+    while True:
+        try:
+            WIData = pickle.load(openfile)
+        except EOFError:
+            break
+
+X_test = WIData["test_datasets"]
+Y_test = WIData["test_labels"]
+X_train = WIData["train_datasets"]
+Y_train = WIData["train_labels"]
+
+"""
+Removing 4 categories from training dataset
+remove category 3,5,7,10
+"""
+idxTF = np.in1d(Y_train,[3,5,7,10])
+Y_train = np.delete(Y_train,np.where(idxTF)[0])
+X_train = np.delete(X_train, np.where(idxTF)[0], axis = 0)
+
+np.unique(Y_train)
+
+"""BN_256-256-256-256-256-256-512_lkeakyrelu01_lr001_kp70_1_flatten_alha02_bs1024_ep1500
+one hot-encoding
+validation dataset
+"""
+# one-hot encode the labels
+ohenc = OneHotEncoder()
+ohenc.fit(Y_train.reshape(-1,1))
+Y_train_OH = ohenc.transform(Y_train.reshape(-1,1)).toarray()
+
+Y_test_OH = keras.utils.to_categorical(Y_test-1, 10)
+
+# break training set into training and validation sets
+(X_train, X_valid) = X_train[1000:], X_train[:1000]
+(Y_train, Y_valid) = Y_train_OH[1000:], Y_train_OH[:1000]
+Y_test = Y_test_OH
 
 # Placeholders for input data and the targets
 x_auto = tf.placeholder(dtype=tf.float32, shape=[None, input_dim], name='x_auto')
@@ -143,8 +176,8 @@ def show_inout(sess,op):
     """
     if not flg_graph:
         return
-    idx = random.sample(range(mnist[0].num_examples),bs_ae)
-    img_in = mnist[0].images[idx,:]
+    idx = random.sample(range(len(Y_train)),bs_ae)
+    img_in = X_train[idx,:]
     img_out = sess.run(op, feed_dict={x_auto: img_in,is_training:False})
     img_out_s = img_out.reshape(bs_ae,28,28)
     img_in_s = img_in.reshape(bs_ae,28,28)
@@ -174,10 +207,10 @@ def show_latent_code(sess):
     plt.tight_layout()
     
     with tf.variable_scope("Encoder"):
-        train_zs,train_ys = sess.run(encoder(mnist[2].images, reuse=True), feed_dict={is_training:False}) #2 is test, 10k images
+        train_zs,train_ys = sess.run(encoder(X_train, reuse=True), feed_dict={is_training:False}) #2 is test, 10k images
     train_yi = np.argmax(train_ys, axis=1) 
     zm = gaussian_mixture(train_zs, n_leaves, train_yi)
-    train_lbl = mnist[2].labels
+    train_lbl = Y_train
     train_lbli = np.argmax(train_lbl, axis=1)
     cm = matplotlib.colors.ListedColormap(myColor)
     fig, ax = plt.subplots(1)
@@ -496,12 +529,20 @@ def tb_init(sess): # create tb path, model path and return tb writer and saved m
     writer = tf.summary.FileWriter(logdir=tensorboard_path, graph=sess.graph)  
     return writer, saved_model_path
 
-def tb_write(sess):
-    test_x, test_y = mnist.test.next_batch(bs_ae_tb) # to evalute accuracy with unseen data.
-    #test_x, test_y = mnist.train.next_batch(tb_batch_size) # debuging. want to see the training stats
+def batch(batch_size):
+    perm = np.random.permutation(range(0, len(Y_train)))
+    X_train_cpy = X_train[perm]
+    Y_train_cpy = Y_train[perm]
+    for batch_i in range(0, len(Y_train)//batch_size):
+        start_i = batch_i * batch_size
+        X_batch = X_train_cpy[start_i:start_i + batch_size].reshape(-1,45*45*2)
+        Y_batch = Y_train_cpy[start_i:start_i + batch_size]
+        yield X_batch, Y_batch
+        
+def tb_write(sess,batch_x,batch_y):
     # use the priviousely generated data for others
-    sm = sess.run(summary_op,feed_dict={is_training:False, x_auto:test_x, y_test:test_y,y_real:real_y, \
-            x_train:alltrain_x, y_train:alltrain_y, z_real:real_z,y_Zblanket:Zblanket_y,y_Zreal:Zreal_y\
+    sm = sess.run(summary_op,feed_dict={is_training:False, x_auto:X_valid, y_test:Y_valid,y_real:real_y, \
+            x_train:batch_x, y_train:batch_y, z_real:real_z,y_Zblanket:Zblanket_y,y_Zreal:Zreal_y\
             ,z_blanket:blanket_z, y_blanket:blanket_y})
     writer.add_summary(sm, global_step=step)
 
@@ -509,35 +550,33 @@ with tf.Session(config=config) as sess:
     if mode==1: # Latent regulation
         writer,saved_model_path = tb_init(sess)   
         _,_,blanket_z = get_blanket(res_blanket)
-        n_batches = int(mnist.train.num_examples / bs_ae)
-        alltrain_x, alltrain_y = mnist.train.next_batch(n_label)
+        n_batches = int(len(Y_train) / bs_ae)
         for i in range(n_epochs_ge):
             print("------------------Epoch {}/{} ------------------".format(i, n_epochs_ge))
+            bt = batch(bs_ae)
             for b in tqdm(range(n_batches)):    
                 #Discriminator
-                auto_x, _ = mnist.train.next_batch(bs_ae)
-                Zreal_y = np.eye(10)[np.random.randint(0,n_leaves, size=bs_z_real)]
-                real_y = np.eye(10)[np.random.randint(0,n_leaves, size=bs_z_real)]+np.random.normal(0.0,jit_std,(bs_z_real,10))
-                Zblanket_y = np.eye(10)[np.random.randint(0,n_leaves, size=res_blanket*res_blanket)]
+                batch_x, batch_y = next(bt)
+                Zreal_y = np.eye(6)[np.random.randint(0,n_leaves, size=bs_z_real)]
+                real_y = np.eye(6)[np.random.randint(0,n_leaves, size=bs_z_real)]+np.random.normal(0.0,jit_std,(bs_z_real,6))
+                Zblanket_y = np.eye(6)[np.random.randint(0,n_leaves, size=res_blanket*res_blanket)]
                 real_z = gaussian(bs_z_real)
           
-                blanket_y = (np.random.uniform(-3,3,10*res_blanket*res_blanket)).astype('float32').reshape(res_blanket*res_blanket,10)
+                blanket_y = (np.random.uniform(-3,3,6*res_blanket*res_blanket)).astype('float32').reshape(res_blanket*res_blanket,6)
       
                 sess.run([discriminator_optimizer],feed_dict={is_training:True,\
-                        x_auto:auto_x, y_Zreal:Zreal_y, y_Zblanket:Zblanket_y,y_real:real_y,\
+                        x_auto:batch_x, y_Zreal:Zreal_y, y_Zblanket:Zblanket_y,y_real:real_y,\
                         z_real:real_z, z_blanket:blanket_z, y_blanket:blanket_y})
     
                 #Generator - autoencoder, fooling descriminator, and y semi-supervised classification
-                train_xb, train_yb = next_batch(alltrain_x,alltrain_y,bs_ss)
-                
                 sess.run([generator_optimizer],feed_dict={is_training:True,\
-                         x_auto:auto_x, x_train:train_xb, y_train:train_yb})
+                         x_auto:batch_x, x_train:batch_x, y_train:batch_y})
                 if b % step_tb_log == 0:
                     show_z_discriminator(sess,1)  
                     show_z_discriminator(sess,4)  # [0,0,0,0,1,0,0,0,0,0]
                     show_z_discriminator(sess,-1) 
                     show_latent_code(sess)
-                    tb_write(sess)
+                    tb_write(sess,batch_x,batch_y)
                 step += 1
         saver.save(sess, save_path=saved_model_path, global_step=step, write_meta_graph = True)
         writer.close()
