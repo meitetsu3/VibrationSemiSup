@@ -8,41 +8,42 @@ modes:
 1: Latent regulation. train generator to fool Descriminator with reconstruction constraint.
 0: Showing latest model results. InOut, true dist, discriminator, latent dist.
 """
-exptitle =  'base_kp95_dc3l_wfool01_wfake001_wreal100' #experiment title that goes in tensorflow folder name
-mode = 1
-flg_graph = False # showing graphs or not during the training. Showing graphs significantly slows down the training.
+exptitle =  'kp80_diskp100_ep100_2l512-512_wfool0001' #experiment title that goes in tensorflow folder name
+mode = 0
+flg_graph = True # showing graphs or not during the training. Showing graphs significantly slows down the training.
 model_folder = '' # name of the model to be restored. white space means most recent.
-
 bs_ae = 2000  # autoencoder training batch size
-keep_prob = 0.95 # keep probability of drop out
-w_zfool = 0.01 # weight on z fooling
+keep_prob = 0.80# keep probability of drop out
+w_zfool = 0.001 # weight on z fooling
 w_ae_loss = 1.00 # weight on autoencoding reconstuction loss
-w_fake = 0.001 # weight on fake samples in descriminator loss
-w_real = 100.0 # weight on real samples in descriminator loss
-n_leaves = 6 # number of leaves in the mixed 2D Gaussian
-n_epochs_ge = 0*n_leaves # mode 3, generator training epochs
-n_epochs_dc = 250 # discriminator pretrain epoch
+alpha = 0.2
+n_leaves = 7 # number of leaves in the mixed 2D Gaussian
+n_epochs_ge = 100*n_leaves # mode 3, generator training epochs
+
+
 import numpy as np
-res_blanket = 100*int(np.sqrt(n_leaves)) # blanket resoliution for descriminator or its contour plot
-bs_z_real = int(res_blanket*res_blanket/2) # descriminator training z real dist samplling batch size
+res_blanket = 10*int(np.sqrt(n_leaves)) # blanket resoliution for descriminator or its contour plot
+bs_z_real = int(res_blanket*res_blanket/1) # descriminator training z real dist samplling batch size
 bs_ae_tb = 800  # x_inputs batch size for tb
 step_tb_log = 800  # tb logging step
 import tensorflow as tf
 config = tf.ConfigProto()
 config.gpu_options.per_process_gpu_memory_fraction = 0.2 # can run up to 4 threads on main GPU, and 5 on others.
-
+#config.log_device_placement = True
+#config.allow_soft_placement=True
 x_blanket_vis = 5 # x to the blanket resolution for descriminator contour plot
-myColor = ['black','orange', 'red', 'blue','gray','green','pink','cyan','lime','magenta']
+myColor10 = ['black','orange', 'red', 'blue','gray','green','pink','cyan','lime','magenta']
+myColor7 = ['black','orange', 'red','gray','pink','cyan','magenta']
+CatConvList7 = [1,2,3,5,7,8,10]
+CatConvList10 = [1,2,3,4,5,6,7,8,9,10]
 input_dim = 45*45*2
 xLU = [-5,5] # blanket x axis lower and upper
 yLU = [-5,5] # blanket y axis lower and upper
 n_l1 = 512
-n_l2 = 256
-n_l3 = 256
-n_l4 = 256
-n_l5 = 256
-n_l6 = 256
-n_l7 = 256
+n_l2 = 512
+#n_l3 = 256
+#n_l4 = 256
+#n_l5 = 256
 z_dim = 2
 results_path = './Results/Adversarial_Autoencoder'
 
@@ -57,6 +58,7 @@ from sklearn.preprocessing import OneHotEncoder
 import keras
 import random
 from tqdm import tqdm
+from math import cos,sin
 
 # reset graph
 tf.reset_default_graph()
@@ -81,9 +83,9 @@ Y_train = WIData["train_labels"]
 
 """
 Removing 4 categories from training dataset
-remove category 3,5,7,10
+remove category 4,6,9
 """
-idxTF = np.in1d(Y_train,[3,5,7,10])
+idxTF = np.in1d(Y_train,[4,6,9])
 Y_train = np.delete(Y_train,np.where(idxTF)[0])
 X_train = np.delete(X_train, np.where(idxTF)[0], axis = 0)
 
@@ -191,7 +193,7 @@ def show_inout(sess,op,ch):
     plt.show()
     plt.close()
 
-def show_latent_code(sess, X, Y, n_leaves):
+def show_latent_code(sess,X,Y, MyColor, CatConvList):
     """
     Shows latent codes distribution 
     Parameters. seess:TF session.
@@ -204,14 +206,14 @@ def show_latent_code(sess, X, Y, n_leaves):
     with tf.variable_scope("Encoder"):
         train_zs = sess.run(encoder_outputZ, feed_dict={x_train:X.reshape(-1,45*45*2),is_training:False}) #2 is test, 10k images
 
-    cm = matplotlib.colors.ListedColormap(myColor)
+    cm = matplotlib.colors.ListedColormap(MyColor)
     fig, ax = plt.subplots(1)
     
-    for i in range(n_leaves):
+    for i in range(Y.shape[1]):
         y=train_zs[np.where(Y[:,i]==1),1][0,:]
         x=train_zs[np.where(Y[:,i]==1),0][0,:]
         color = cm(i)
-        ax.scatter(x, y, label=str(i), alpha=0.9, facecolor=color, linewidth=0.02, s = 10)
+        ax.scatter(x, y, label=str(CatConvList[i]), alpha=0.9, facecolor=color, linewidth=0.02, s = 10)
     
     ax.legend(loc='center left', markerscale = 3, bbox_to_anchor=(1, 0.5))
     ax.set_title('2D latent code')    
@@ -232,9 +234,9 @@ def show_z_discriminator(sess,digit):
     
     if digit==-1:
         #y_input = (np.random.uniform(-100,100,10*br*br)).astype('float32').reshape(br*br,10)
-        y_input = np.full([br*br,6],0.05,dtype="float32")
+        y_input = np.full([br*br,7],0.05,dtype="float32")
     else:
-        y_input = np.eye(6,dtype="float32")[np.full([br*br],digit-1)]
+        y_input = np.eye(7,dtype="float32")[np.full([br*br],digit-1)]
     
     plt.rc('figure', figsize=(6, 5))
     plt.tight_layout()
@@ -285,83 +287,88 @@ model Functions
 """
 
 def mlp_enc(x): # multi layer perceptron
+    with tf.contrib.framework.arg_scope(
+            [fully_connected],
+            weights_initializer=he_init):
 
-    alpha = 0.01
+        X_drop = dropout(x, keep_prob, is_training = is_training)
+        l1 = tf.layers.dense(X_drop, n_l1)
+        #l1 = tf.layers.batch_normalization(l1, training=is_training)
+        l1 = tf.maximum(alpha * l1, l1)
+        l1 = dropout(l1, keep_prob, is_training=is_training)
+        
+        l2 = tf.layers.dense(l1, n_l2)
+        #l2 = tf.layers.batch_normalization(l2, training=is_training)
+        l2 = tf.maximum(alpha * l2, l2)
+        l2 = dropout(l2, keep_prob, is_training=is_training)
+        
+#        l3 = tf.layers.dense(l2, n_l3)
+#        #l3 = tf.layers.batch_normalization(l3, training=is_training)
+#        l3 = tf.maximum(alpha * l3, l3)
+#        l3 = dropout(l3, keep_prob, is_training=is_training)
 
-    l1 = tf.layers.dense(x, n_l1)
-    l1 = tf.layers.batch_normalization(l1, training=is_training)
-    l1 = tf.maximum(alpha * l1, l1)
-    l1 = dropout(l1, keep_prob, is_training=is_training)
-    #        bn1 = tf.contrib.layers.batch_norm(elu1, is_training = is_training)
-    #        bn1 = 
-
-    l2 = tf.layers.dense(l1, n_l2)
-    l2 = tf.layers.batch_normalization(l2, training=is_training)
-    l2 = tf.maximum(alpha * l2, l2)
-    l2 = dropout(l2, keep_prob, is_training=is_training)
-    
-    l3 = tf.layers.dense(l2, n_l3)
-    l3 = tf.layers.batch_normalization(l3, training=is_training)
-    l3 = tf.maximum(alpha * l3, l3)
-    l3 = dropout(l3, keep_prob, is_training=is_training)
-    
-    l4 = tf.layers.dense(l3, n_l4)
-    l4 = tf.layers.batch_normalization(l4, training=is_training)
-    l4 = tf.maximum(alpha * l4, l4)
-    l4 = dropout(l4, keep_prob, is_training=is_training)
-    
-    l5 = tf.layers.dense(l4, n_l5)
-    l5 = tf.layers.batch_normalization(l4, training=is_training)
-    l5 = tf.maximum(alpha * l5, l5)
-    l5 = dropout(l5, keep_prob, is_training=is_training)
-    
-    l6 = tf.layers.dense(l5, n_l6)
-    l6 = tf.layers.batch_normalization(l6, training=is_training)
-    l6 = tf.maximum(alpha * l6, l6)
-    l6 = dropout(l6, keep_prob, is_training=is_training)
-    #        elu4 = fully_connected(bn3, n_l4,activation_fn =None)
-    #        bn4 = tf.contrib.layers.batch_norm(elu4, is_training = is_training)
-    #        bn4 = tf.maximum(alpha * bn4, bn4)
-    #        bn4 = dropout(bn4, keep_prob, is_training=is_training)
-    return l6
+#        l4 = tf.layers.dense(l3, n_l4)
+#        #l3 = tf.layers.batch_normalization(l3, training=is_training)
+#        l4 = tf.maximum(alpha * l4, l4)
+#        l4 = dropout(l4, keep_prob, is_training=is_training)
+# 
+#        l5 = tf.layers.dense(l4, n_l5)
+#        #l3 = tf.layers.batch_normalization(l3, training=is_training)
+#        l5 = tf.maximum(alpha * l5, l5)
+#        l5 = dropout(l5, keep_prob, is_training=is_training)       
+    return l2
 
 def mlp_dec(x): # multi layer perceptron
+    with tf.contrib.framework.arg_scope(
+            [fully_connected],
+            weights_initializer=he_init):
+        
+        X_drop = dropout(x, keep_prob, is_training = is_training)
+ 
+#        l5 = tf.layers.dense(X_drop, n_l5)
+#        #l3 = tf.layers.batch_normalization(l3, training=is_training)
+#        l5 = tf.maximum(alpha * l5, l5)
+#        l5 = dropout(l5, keep_prob, is_training=is_training)
+#        
+#        l4 = tf.layers.dense(X_drop, n_l4)
+#        #l3 = tf.layers.batch_normalization(l3, training=is_training)
+#        l4 = tf.maximum(alpha * l4, l4)
+#        l4 = dropout(l4, keep_prob, is_training=is_training)
+        
+#        l3 = tf.layers.dense(X_drop, n_l3)
+#        #l3 = tf.layers.batch_normalization(l3, training=is_training)
+#        l3 = tf.maximum(alpha * l3, l3)
+#        l3 = dropout(l3, keep_prob, is_training=is_training)
 
-    alpha = 0.01
-    l1 = tf.layers.dense(x, n_l6)
-    l1 = tf.layers.batch_normalization(l1, training=is_training)
-    l1 = tf.maximum(alpha * l1, l1)
-    l1 = dropout(l1, keep_prob, is_training=is_training)
-    
-    l2 = tf.layers.dense(l1, n_l5)
-    l2 = tf.layers.batch_normalization(l2, training=is_training)
-    l2 = tf.maximum(alpha * l2, l2)
-    l2 = dropout(l2, keep_prob, is_training=is_training)
-    
-    l3 = tf.layers.dense(l2, n_l4)
-    l3 = tf.layers.batch_normalization(l3, training=is_training)
-    l3 = tf.maximum(alpha * l3, l3)
-    l3 = dropout(l3, keep_prob, is_training=is_training)
-    
-#    l4 = tf.layers.dense(l3, n_l3)
-#    l4 = tf.layers.batch_normalization(l4, training=is_training)
-#    l4 = tf.maximum(alpha * l4, l4)
-#    l4 = dropout(l4, keep_prob, is_training=is_training)
-#
-#    l5 = tf.layers.dense(l4, n_l2)
-#    l5 = tf.layers.batch_normalization(l5, training=is_training)
-#    l5 = tf.maximum(alpha * l5, l5)
-#    l5 = dropout(l5, keep_prob, is_training=is_training)
-#    
-#    l6 = tf.layers.dense(l5, n_l1)
-#    l6 = tf.layers.batch_normalization(l6, training=is_training)
-#    l6 = tf.maximum(alpha * l6, l6)
-#    l6 = dropout(l6, keep_prob, is_training=is_training)
-#        elu1 = fully_connected(bn3, n_l1,activation_fn =None)
-#        bn4 = tf.contrib.layers.batch_norm(elu1, is_training = is_training)
-#        bn4 = tf.maximum(alpha * bn4, bn4)
-#        bn4 = dropout(bn4, keep_prob, is_training=is_training)
-    return l3
+        l2 = tf.layers.dense(X_drop, n_l2)
+        #l2 = tf.layers.batch_normalization(l2, training=is_training)
+        l2 = tf.maximum(alpha * l2, l2)
+        l2 = dropout(l2, keep_prob, is_training=is_training)
+ 
+        l1 = tf.layers.dense(l2, n_l1)
+        #l1 = tf.layers.batch_normalization(l1, training=is_training)
+        l1 = tf.maximum(alpha * l1, l1)
+        l1 = dropout(l1, keep_prob, is_training=is_training)       
+    return l1
+
+def mlp_dis(x): # multi layer perceptron
+    with tf.contrib.framework.arg_scope(
+            [fully_connected],
+            weights_initializer=he_init):
+
+        X_drop = dropout(x, 1.0, is_training = is_training)
+        l3 = tf.layers.dense(X_drop, 1000)
+        #l3 = tf.layers.batch_normalization(l3, training=is_training)
+        l3 = tf.maximum(alpha * l3, l3)
+
+
+        l2 = tf.layers.dense(l3, 1000)
+        #l2 = tf.layers.batch_normalization(l2, training=is_training)
+        l2 = tf.maximum(alpha * l2, l2)
+
+ 
+        
+    return l2
 
 def encoder(x, reuse=False):
     """
@@ -400,31 +407,22 @@ def discriminator_z(x,y, reuse=False):
     :return: tensor of shape [batch_size, 1]. I think it's better to take sigmoid here.
     """
     with tf.variable_scope(tf.get_variable_scope(), reuse=reuse):
-        last_layer = mlp_dec(tf.concat([x,y],1))
+        last_layer = mlp_dis(tf.concat([x,y],1))
         output = fully_connected(last_layer, 1, weights_initializer=he_init, scope='None',activation_fn=None)
     return output
 
-def discriminator_y(y, reuse=False):
-    """
-    Discriminator that leanes to activate at true distribution and not for the others.
-    :param y: predicted class.
-    :param reuse: True -> Reuse the discriminator variables, False -> Create the variables
-    :return: tensor of shape [batch_size, 1]. I think it's better to take sigmoid here.
-    """
-    if reuse:
-        tf.get_variable_scope().reuse_variables()
-    last_layer = mlp_dec(y)
-    output = fully_connected(last_layer, 1, weights_initializer=he_init, scope='None',activation_fn=None)
-    return output
+
 
 def conditional_gaussian(y):
     """
     Crate true z, 2D standard normal distribution with specified postion by y one hot encoding vector
     """
     digits = [np.where(r==1)[0][0] for r in y ]
-    centerlist = [(0,0),(1,1),(3,1),(2,2),(1,3),(2,3)]
+    centerlist = [(0,0),(cos(0),sin(0)),(cos(np.pi/6.0),sin(np.pi/6.0))
+        ,(cos(np.pi/6.0*4),sin(np.pi/6.0*4)),(cos(np.pi),sin(np.pi))
+        ,(cos(np.pi/6.0*8),sin(np.pi/6.0*8)),(cos(np.pi/6.0*10),sin(np.pi/6.0*10))]
     centers = [centerlist[i] for i in digits]
-    return np.random.normal(0, 0.1, (len(y), 2))+centers
+    return np.random.normal(0, 0.01, (len(y), 2))+centers
  
 """
 Defining key operations, Loess, Optimizer and other necessary operations
@@ -449,7 +447,7 @@ with tf.name_scope("dc_loss"):
     DCloss_Zfake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(\
             labels=tf.zeros_like(d_Zfake), logits=d_Zfake))
     
-    dc_Zloss = DCloss_Zblanket + w_real*DCloss_Zreal+w_fake*DCloss_Zfake
+    dc_Zloss = DCloss_Zblanket + DCloss_Zreal+DCloss_Zfake
     dc_loss = dc_Zloss
 
 with tf.name_scope("ge_loss"):
@@ -527,36 +525,14 @@ with tf.Session(config=config) as sess:
         writer,saved_model_path = tb_init(sess)   
         _,_,blanket_z = get_blanket(res_blanket)
         n_batches = int(len(Y_train) / bs_ae)
-        
-        for i in range(n_epochs_dc):
-            print("------------------DC Pretrain {}/{} ------------------".format(i, n_epochs_ge))
-            bt = batch(bs_ae)
-            for b in tqdm(range(n_batches)):    
-                #Discriminator
-                batch_x, batch_y = next(bt)
-                Zreal_y = np.eye(6)[np.random.randint(0,n_leaves, size=bs_z_real)]
-                Zblanket_y = np.eye(6)[np.random.randint(0,n_leaves, size=res_blanket*res_blanket)]
-                real_z = conditional_gaussian(Zreal_y)
- 
-                sess.run([discriminator_optimizer],feed_dict={is_training:True,\
-                        x_train:batch_x, y_train:batch_y,y_Zreal:Zreal_y, y_Zblanket:Zblanket_y,\
-                        z_real:real_z, z_blanket:blanket_z})
- 
-                if b % step_tb_log == 0:
-                    show_z_discriminator(sess,1)  
-                    show_z_discriminator(sess,4)  # [0,0,0,0,1,0,0,0,0,0]
-                    show_z_discriminator(sess,-1) 
-                    show_latent_code(sess,batch_x,batch_y,n_leaves=6)
-                    tb_write(sess,batch_x,batch_y)
-                step += 1
         for i in range(n_epochs_ge):
             print("------------------Epoch {}/{} ------------------".format(i, n_epochs_ge))
             bt = batch(bs_ae)
             for b in tqdm(range(n_batches)):    
                 #Discriminator
                 batch_x, batch_y = next(bt)
-                Zreal_y = np.eye(6)[np.random.randint(0,n_leaves, size=bs_z_real)]
-                Zblanket_y = np.eye(6)[np.random.randint(0,n_leaves, size=res_blanket*res_blanket)]
+                Zreal_y = np.eye(7)[np.random.randint(0,n_leaves, size=bs_z_real)]
+                Zblanket_y = np.eye(7)[np.random.randint(0,n_leaves, size=res_blanket*res_blanket)]
                 real_z = conditional_gaussian(Zreal_y)
  
                 sess.run([discriminator_optimizer],feed_dict={is_training:True,\
@@ -570,7 +546,7 @@ with tf.Session(config=config) as sess:
                     show_z_discriminator(sess,1)  
                     show_z_discriminator(sess,4)  # [0,0,0,0,1,0,0,0,0,0]
                     show_z_discriminator(sess,-1) 
-                    show_latent_code(sess,batch_x,batch_y,n_leaves=6)
+                    show_latent_code(sess,X_train,Y_train,MyColor=myColor7,CatConvList=CatConvList7)
                     tb_write(sess,batch_x,batch_y)
                 step += 1
         saver.save(sess, save_path=saved_model_path, global_step=step, write_meta_graph = True)
@@ -578,13 +554,19 @@ with tf.Session(config=config) as sess:
     if mode==0: # showing the latest model result. InOut, true dist, discriminator, latent dist.
         model_restore(saver,mode,model_folder)
         show_z_discriminator(sess,1)
+        show_z_discriminator(sess,2)
+        show_z_discriminator(sess,3)
+        show_z_discriminator(sess,4)
+        show_z_discriminator(sess,5)
         show_z_discriminator(sess,6)
+        show_z_discriminator(sess,7)
         show_inout(sess, op=generated_images, ch=0)     
-        Zreal_y = np.eye(6)[np.random.randint(0,n_leaves, size=bs_z_real)]
+        Zreal_y = np.eye(7)[np.random.randint(0,n_leaves, size=bs_z_real)]
         real_z = conditional_gaussian(Zreal_y)
         show_z_dist(real_z)
-        show_latent_code(sess,X_train,Y_train,n_leaves=6)
-        show_latent_code(sess,X_test,Y_test,n_leaves=10)
+        show_latent_code(sess,X_train,Y_train,MyColor=myColor7,CatConvList=CatConvList7)
+        show_latent_code(sess,X_valid,Y_valid,MyColor=myColor7,CatConvList=CatConvList7)
+        show_latent_code(sess,X_test,Y_test,MyColor=myColor10,CatConvList=CatConvList10)
         
             
         
